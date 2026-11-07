@@ -47,7 +47,6 @@ curl -fsSL https://raw.githubusercontent.com/DiegoSilva77/script-newpc/main/pc-s
 |---|---|
 | `--dry-run` | Mostra tudo o que seria feito, sem executar nada |
 | `--sem-pausa` | Não pausa antes de cada comando |
-| `--menu` | Só reorganiza as pastas do menu de aplicativos (Linux/GNOME) |
 | `--todos -y` | Marca tudo e não faz perguntas |
 
 Com o Python já instalado, também dá para baixar o arquivo e rodar direto:
