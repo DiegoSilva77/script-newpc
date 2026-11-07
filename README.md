@@ -7,7 +7,9 @@ Ele roda em **modo didático**: antes de cada comando, mostra o comando real e e
 
 ## Como usar
 
-Num PC recém-formatado, **sem instalar nada antes**, cole um único comando.
+Não precisa instalar nem baixar nada antes. Abra o terminal, cole o comando do seu sistema e
+o instalador já abre. **Esse comando é o próprio script rodando**: ele baixa o `pc-setup.py`
+deste repositório e executa na hora, numa ação só.
 
 **Linux** (como seu usuário, sem sudo):
 
@@ -21,7 +23,11 @@ curl -fsSL https://raw.githubusercontent.com/DiegoSilva77/script-newpc/main/pc-s
 irm https://raw.githubusercontent.com/DiegoSilva77/script-newpc/main/pc-setup.py | iex
 ```
 
-O script instala o Python se faltar, prepara a interface e começa perguntando se o sistema é **Linux ou Windows**.
+A primeira coisa que o instalador faz é perguntar se o sistema é **Linux ou Windows**.
+Se o PC não tiver Python, o próprio script instala sozinho antes de abrir o menu.
+
+O comando muda de um sistema para o outro só porque o terminal do Windows (PowerShell) e o do
+Linux (bash) têm comandos diferentes para "baixar e executar". O arquivo executado é o mesmo.
 
 No Windows, as ferramentas de pentest são instaladas dentro do **Kali no WSL2**, porque o Windows Defender bloquearia várias delas.
 
