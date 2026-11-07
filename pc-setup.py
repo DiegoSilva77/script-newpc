@@ -136,7 +136,6 @@ PCSETUP-ARQUIVO-UNICO
 # OPÇÕES
 #     --dry-run     mostra tudo o que seria feito, sem executar nada
 #     --sem-pausa   não pausa antes de cada comando
-#     --menu        só reorganiza as pastas do menu de aplicativos (Linux/GNOME)
 #     --todos -y    marca tudo e não faz perguntas
 #     --os X        simula outro sistema (fedora, debian, arch, windows) com --dry-run
 #
@@ -144,16 +143,13 @@ PCSETUP-ARQUIVO-UNICO
 #     1. Preparação do ambiente (só biblioteca padrão do Python)
 #     2. Catálogo de ferramentas  <- para adicionar ferramentas, edite aqui
 #     3. Visual (cores, ícones, banner, tabelas)
-#     4. Menu de aplicativos do GNOME (pastas como no Kali)
-#     5. Detecção do sistema, catálogo e execução de comandos
-#     6. Interface e programa principal
+#     4. Detecção do sistema, catálogo e execução de comandos
+#     5. Interface e programa principal
 
 from __future__ import annotations
 
 import argparse
-import ast
 import datetime as dt
-import fnmatch
 import getpass
 import os
 import platform
@@ -165,7 +161,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
 
 # =============================================================================
 #  1. PREPARAÇÃO DO AMBIENTE
@@ -253,7 +248,6 @@ from rich.progress_bar import ProgressBar  # noqa: E402
 from rich.syntax import Syntax  # noqa: E402
 from rich.table import Table  # noqa: E402
 from rich.text import Text  # noqa: E402
-from rich.tree import Tree  # noqa: E402
 
 # =============================================================================
 #  2. CATÁLOGO DE FERRAMENTAS
@@ -295,17 +289,6 @@ CATALOGO = r"""
 #      executa: cmd    -> comando termina com sucesso?
 #    pos:    passos executados depois da instalação (mesmo formato de passos)
 #    notas:  aviso mostrado no resumo final
-#
-#  Menu de aplicativos (opcional, só Linux com GNOME):
-#    Ferramentas de categorias numeradas ("01 ...", "02 ...") ganham um ícone
-#    dentro de uma pasta com o nome da categoria, como no menu do Kali.
-#    menu:
-#      nome: texto        nome do ícone (padrão: o nome da ferramenta)
-#      terminal: cmd      abre um terminal rodando este comando (ex: nmap -h)
-#      desktop: [ids]     usa um atalho que o pacote já criou (aceita * como curinga)
-#      abrir: cmd         se não achar o atalho, cria um que abre este programa
-#      icone: nome        ícone do tema ou caminho de imagem
-#    Para vários ícones, use uma lista (veja "dig + whois").
 #
 #  Variáveis que o script substitui nos comandos:
 #    {instalar}    comando de instalação da distro (ex: sudo dnf install -y)
@@ -533,9 +516,17 @@ CATALOGO = r"""
         explica: Atualiza o cache de fontes do sistema para que os programas enxerguem a fonte nova.
     verificar:
       caminho: ~/.local/share/fonts/JetBrainsMonoNerdFont
+    pos:
+      - cmd: |-
+          if command -v ptyxis >/dev/null; then gsettings set org.gnome.Ptyxis use-system-font false && gsettings set org.gnome.Ptyxis font-name 'JetBrainsMono Nerd Font 11'; fi
+        explica: Se o seu terminal for o Ptyxis (o padrão do Fedora), configura ele para usar a Nerd Font. use-system-font false desliga a fonte padrão do sistema e font-name escolhe a fonte e o tamanho.
+      - cmd: |-
+          if command -v gnome-terminal >/dev/null; then P=$(gsettings get org.gnome.Terminal.ProfilesList default | tr -d "'") && gsettings set "org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$P/" use-system-font false && gsettings set "org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:$P/" font 'JetBrainsMono Nerd Font 11'; fi
+        explica: Faz o mesmo no GNOME Terminal (o padrão do Ubuntu), que guarda a fonte por perfil. O primeiro comando descobre o ID do perfil padrão e os seguintes mudam a fonte desse perfil.
+    notas: O Ptyxis e o GNOME Terminal já foram configurados para a Nerd Font. Abra uma nova janela do terminal para ver. Em outro terminal, escolha "JetBrainsMono Nerd Font" nas preferências dele.
   windows:
     winget: DEVCOM.JetBrainsMonoNerdFont
-  notas: Configure o seu terminal para usar a fonte "JetBrainsMono Nerd Font".
+    notas: No Windows Terminal, vá em Configurações → (seu perfil) → Aparência → Tipo de fonte e escolha "JetBrainsMono Nerd Font".
 
 - id: lsd
   nome: lsd
@@ -556,8 +547,8 @@ CATALOGO = r"""
   descricao: Histórico de comandos com busca (Ctrl+R)
   linux:
     passos:
-      - cmd: curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh
-        explica: Roda o instalador oficial. --proto e --tlsv1.2 garantem que o download use HTTPS seguro. O instalador adiciona a integração com o bash e pergunta se você quer importar o histórico atual.
+      - cmd: curl --proto '=https' --tlsv1.2 --retry 5 --retry-all-errors -LsSf https://setup.atuin.sh | sh
+        explica: Roda o instalador oficial. --proto e --tlsv1.2 garantem que o download use HTTPS seguro, e --retry 5 tenta de novo se o servidor do atuin der erro temporário (ele às vezes responde 502). O instalador adiciona a integração com o bash e pergunta se você quer importar o histórico atual.
     verificar:
       caminho: ~/.atuin/bin/atuin
 
@@ -763,7 +754,7 @@ CATALOGO = r"""
 
 # =============================================================================
 #  SEGURANÇA
-#  As categorias numeradas viram pastas no menu de aplicativos (como no Kali).
+#  Numeradas como as categorias do menu do Kali.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -779,8 +770,6 @@ CATALOGO = r"""
   windows:
     winget: Insecure.Nmap
     notas: O nmap no Windows já instala o ncat e o Npcap (driver de captura de pacotes).
-  menu:
-    terminal: nmap -h
 
 - id: dns
   nome: dig + whois
@@ -794,11 +783,6 @@ CATALOGO = r"""
     pacote: bind whois
   windows:
     kali: dnsutils whois
-  menu:
-    - nome: dig
-      terminal: dig -h
-    - nome: whois
-      terminal: whois --help
 
 # -----------------------------------------------------------------------------
 #  02 ANÁLISE DE VULNERABILIDADES
@@ -818,8 +802,6 @@ CATALOGO = r"""
     pacote: trivy
   windows:
     kali: trivy
-  menu:
-    terminal: trivy --help
 
 - id: lynis
   nome: lynis
@@ -827,8 +809,6 @@ CATALOGO = r"""
   descricao: Audita a segurança do seu próprio Linux e sugere melhorias
   linux:
     pacote: lynis
-  menu:
-    terminal: lynis --help
   notas: Rode "sudo lynis audit system" e leia as sugestões (Suggestions) no final do relatório.
 
 # -----------------------------------------------------------------------------
@@ -851,10 +831,6 @@ CATALOGO = r"""
       caminho: ~/BurpSuiteCommunity/BurpSuiteCommunity
   windows:
     winget: PortSwigger.BurpSuite.Community
-  menu:
-    desktop: ["*BurpSuiteCommunity"]
-    abrir: ~/BurpSuiteCommunity/BurpSuiteCommunity
-    icone: ~/BurpSuiteCommunity/.install4j/BurpSuiteCommunity.png
 
 - id: ffuf
   nome: ffuf
@@ -871,8 +847,6 @@ CATALOGO = r"""
     pacote: ffuf
   windows:
     kali: ffuf
-  menu:
-    terminal: ffuf -h
 
 - id: sqlmap
   nome: sqlmap
@@ -890,8 +864,6 @@ CATALOGO = r"""
     pacote: sqlmap
   windows:
     kali: sqlmap
-  menu:
-    terminal: sqlmap -h
 
 # -----------------------------------------------------------------------------
 #  04 ATAQUES DE SENHA
@@ -905,8 +877,6 @@ CATALOGO = r"""
     pacote: john
   windows:
     kali: john
-  menu:
-    terminal: john
 
 - id: hydra
   nome: hydra
@@ -916,8 +886,6 @@ CATALOGO = r"""
     pacote: hydra
   windows:
     kali: hydra
-  menu:
-    terminal: hydra -h
 
 - id: seclists
   nome: SecLists
@@ -932,8 +900,6 @@ CATALOGO = r"""
   windows:
     kali: seclists
   notas: A rockyou fica compactada em Passwords/Leaked-Databases/rockyou.txt.tar.gz dentro da SecLists.
-  menu:
-    terminal: cd /usr/share/seclists && ls
 
 # -----------------------------------------------------------------------------
 #  05 ENGENHARIA REVERSA
@@ -950,8 +916,6 @@ CATALOGO = r"""
   windows:
     kali: ghidra
     notas: O Ghidra foi instalado no Kali (WSL). Abra pelo menu Iniciar ou rodando "wsl -d kali-linux ghidra".
-  menu:
-    desktop: [org.ghidra_sre.Ghidra, ghidra]
 
 - id: x64dbg
   nome: x64dbg
@@ -968,8 +932,6 @@ CATALOGO = r"""
     pacote: gdb
   windows:
     kali: gdb
-  menu:
-    terminal: gdb --help
 
 # -----------------------------------------------------------------------------
 #  06 EXPLORAÇÃO
@@ -992,9 +954,6 @@ CATALOGO = r"""
   windows:
     kali: metasploit-framework
   notas: Na primeira vez, rode "msfconsole" e aceite criar o banco de dados.
-  menu:
-    nome: msfconsole
-    terminal: msfconsole
 
 - id: exploitdb
   nome: Exploit-DB (searchsploit)
@@ -1013,9 +972,6 @@ CATALOGO = r"""
   windows:
     kali: exploitdb
   notas: Para atualizar a base de exploits, rode "searchsploit -u".
-  menu:
-    nome: searchsploit
-    terminal: searchsploit -h
 
 # -----------------------------------------------------------------------------
 #  07 SNIFFING E SPOOFING
@@ -1044,9 +1000,6 @@ CATALOGO = r"""
     notas: Saia e entre na sessão para capturar pacotes no Wireshark sem sudo.
   windows:
     winget: WiresharkFoundation.Wireshark
-  menu:
-    desktop: [org.wireshark.Wireshark, wireshark]
-    abrir: wireshark
 
 - id: tcpdump
   nome: tcpdump
@@ -1056,8 +1009,6 @@ CATALOGO = r"""
     pacote: tcpdump
   windows:
     kali: tcpdump
-  menu:
-    terminal: tcpdump --help
 
 # -----------------------------------------------------------------------------
 #  08 PÓS-EXPLORAÇÃO
@@ -1075,8 +1026,6 @@ CATALOGO = r"""
     pacote: openbsd-netcat
   windows:
     kali: netcat-traditional
-  menu:
-    terminal: nc -h
 
 # -----------------------------------------------------------------------------
 #  09 FORENSE
@@ -1090,8 +1039,6 @@ CATALOGO = r"""
     pacote: binwalk
   windows:
     kali: binwalk
-  menu:
-    terminal: binwalk --help
 
 - id: exiftool
   nome: exiftool
@@ -1105,8 +1052,6 @@ CATALOGO = r"""
     pacote: perl-image-exiftool
   windows:
     winget: OliverBetz.ExifTool
-  menu:
-    terminal: "exiftool -ver && echo 'Uso: exiftool ARQUIVO'"
 """
 
 
@@ -1501,219 +1446,7 @@ def configurar_saida() -> None:
 
 
 # =============================================================================
-#  4. MENU DE APLICATIVOS (GNOME)
-# =============================================================================
-# Organiza as ferramentas em pastas no menu de aplicativos do GNOME, como o
-# menu do Kali: uma pasta por categoria ("01 Coleta de informações", ...)
-# com um ícone para cada ferramenta.
-#
-# Como funciona por baixo:
-#   * Cada ícone do menu é um arquivo .desktop (texto simples). Os nossos ficam
-#     em ~/.local/share/applications/ com o prefixo "pcsetup-".
-#   * Ferramentas de terminal ganham um atalho que abre o terminal já rodando
-#     a ajuda da ferramenta (igual ao Kali).
-#   * Programas gráficos (Wireshark, Ghidra, Burp) já trazem o próprio .desktop,
-#     então só colocamos esse atalho dentro da pasta.
-#   * As pastas do GNOME são configuradas com o gsettings, no esquema
-#     org.gnome.desktop.app-folders.
-
-PREFIXO = "pcsetup"
-PASTA_ATALHOS = Path.home() / ".local" / "share" / "applications"
-ESQUEMA = "org.gnome.desktop.app-folders"
-CAMINHO_PASTAS = "/org/gnome/desktop/app-folders/folders"
-
-
-@dataclass
-class Icone:
-    pasta_id: str        # ex: pcsetup-04
-    pasta_nome: str      # ex: 04 Ataques de senha
-    nome: str            # nome mostrado no menu
-    desktop_id: str      # arquivo .desktop usado (nosso ou do pacote)
-    conteudo: str | None # conteúdo do .desktop a criar (None = já existe)
-
-
-def gnome_disponivel() -> bool:
-    if not shutil.which("gsettings"):
-        return False
-    r = subprocess.run(["gsettings", "list-schemas"], capture_output=True, text=True)
-    return ESQUEMA in r.stdout.split()
-
-
-def pastas_de_atalhos() -> list[Path]:
-    """Onde o sistema procura arquivos .desktop (padrão XDG + Flatpak)."""
-    bases = [Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))]
-    bases += [Path(d) for d in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if d]
-    bases += [Path.home() / ".local/share/flatpak/exports/share", Path("/var/lib/flatpak/exports/share")]
-    return list(dict.fromkeys(b / "applications" for b in bases))
-
-
-def achar_atalho(padroes: list[str]) -> str | None:
-    """Procura um .desktop existente. Aceita curingas (ex: *BurpSuiteCommunity)."""
-    pastas = [p for p in pastas_de_atalhos() if p.is_dir()]
-    for padrao in padroes:
-        for pasta in pastas:
-            for arquivo in sorted(pasta.glob("*.desktop")):
-                if arquivo.name.startswith(PREFIXO + "-"):
-                    continue
-                if fnmatch.fnmatch(arquivo.name, padrao + ".desktop"):
-                    return arquivo.name
-    return None
-
-
-def escapar_exec(texto: str) -> str:
-    """Dentro de aspas na linha Exec= de um .desktop, os caracteres " ` $ e \\
-    precisam de barra invertida, e % vira %% (regra da especificação)."""
-    for c in ("\\", '"', "`", "$"):
-        texto = texto.replace(c, "\\" + c)
-    return texto.replace("%", "%%")
-
-
-def criar_desktop(nome: str, comentario: str, exec_: str, icone: str, terminal: bool) -> str:
-    return "\n".join([
-        "[Desktop Entry]",
-        "Type=Application",
-        f"Name={nome}",
-        f"Comment={comentario}",
-        f"Exec={exec_}",
-        f"Icon={icone}",
-        f"Terminal={'true' if terminal else 'false'}",
-        "Categories=System;Security;",
-        "",
-    ])
-
-
-def expandir(caminho: str) -> str:
-    return os.path.expandvars(os.path.expanduser(caminho))
-
-
-def planejar(ferramentas) -> tuple[list[Icone], list[str]]:
-    """Decide qual ícone cada ferramenta ganha. Devolve (ícones, avisos)."""
-    icones: list[Icone] = []
-    avisos: list[str] = []
-    for f in ferramentas:
-        numero = f.categoria.split()[0]
-        pasta_id = f"{PREFIXO}-{numero}"
-        for n, item in enumerate(f.menu, 1):
-            nome = item.get("nome", f.nome)
-            desktop_id = None
-            conteudo = None
-
-            if "desktop" in item:
-                desktop_id = achar_atalho(item["desktop"])
-
-            if desktop_id is None and "abrir" in item:
-                icone = expandir(item.get("icone", "applications-system"))
-                desktop_id = f"{PREFIXO}-{f.id}-{n}.desktop"
-                conteudo = criar_desktop(nome, f.descricao, expandir(item["abrir"]), icone, terminal=False)
-            elif desktop_id is None and "terminal" in item:
-                cmd = escapar_exec(item["terminal"])
-                desktop_id = f"{PREFIXO}-{f.id}-{n}.desktop"
-                conteudo = criar_desktop(
-                    nome, f.descricao, f'bash -c "{cmd}; echo; exec bash"',
-                    item.get("icone", "utilities-terminal"), terminal=True,
-                )
-            elif desktop_id is None:
-                avisos.append(f"{nome}: atalho do programa não encontrado (talvez só apareça após sair e entrar na sessão).")
-                continue
-
-            icones.append(Icone(pasta_id, f.categoria, nome, desktop_id, conteudo))
-    return icones, avisos
-
-
-def ler_lista_gsettings(chave: str) -> list[str]:
-    r = subprocess.run(["gsettings", "get", ESQUEMA, chave], capture_output=True, text=True)
-    texto = r.stdout.strip().removeprefix("@as").strip()
-    try:
-        valor = ast.literal_eval(texto)
-        return list(valor) if isinstance(valor, list) else []
-    except (ValueError, SyntaxError):
-        return []
-
-
-def gvariant_lista(itens: list[str]) -> str:
-    return "[" + ", ".join("'" + i.replace("'", "\\'") + "'" for i in itens) + "]"
-
-
-def comandos_gsettings(icones: list[Icone], pastas_atuais: list[str]) -> list[tuple[str, str]]:
-    """Monta os comandos gsettings, com a explicação de cada um."""
-    pastas: dict[str, tuple[str, list[str]]] = {}
-    for ic in icones:
-        pastas.setdefault(ic.pasta_id, (ic.pasta_nome, []))[1].append(ic.desktop_id)
-
-    comandos = []
-    for pasta_id in sorted(pastas):
-        nome, apps = pastas[pasta_id]
-        alvo = f"{ESQUEMA}.folder:{CAMINHO_PASTAS}/{pasta_id}/"
-        cmd = (f'gsettings set {alvo} name "{nome}" &&\n'
-               f'gsettings set {alvo} apps "{gvariant_lista(apps)}"')
-        comandos.append((cmd, f'Cria a pasta "{nome}" e define quais ícones ficam dentro dela.'))
-
-    outras = [p for p in pastas_atuais if not p.startswith(PREFIXO + "-")]
-    filhos = outras + sorted(pastas)
-    comandos.append((
-        f'gsettings set {ESQUEMA} folder-children "{gvariant_lista(filhos)}"',
-        "folder-children é a lista de pastas que o GNOME mostra. Mantemos as pastas que já existiam "
-        "e acrescentamos as nossas.",
-    ))
-    return comandos
-
-
-def organizar(ferramentas, executor, console, mostrar_passo, rodar=None) -> None:
-    """Cria os ícones e as pastas. Em dry-run só mostra o que faria."""
-    rodar = rodar or executor.rodar
-
-    icones, avisos = planejar(ferramentas)
-    if not icones:
-        console.print("[dim]Nenhuma ferramenta de segurança instalada para colocar no menu.[/]")
-        return
-
-    # 1) Mostra (didático) como é um arquivo .desktop.
-    exemplo = next((ic for ic in icones if ic.conteudo), None)
-    if exemplo:
-        console.print(
-            "  [italic]💡 Cada ícone do menu é um arquivo de texto .desktop. Os nossos ficam em "
-            f"{PASTA_ATALHOS}/. Exemplo, {exemplo.desktop_id}:[/]"
-        )
-        console.print(Syntax(exemplo.conteudo, "ini", theme="ansi_dark", padding=(0, 4)))
-        console.print(
-            "  [italic]💡 Terminal=true faz o GNOME abrir um terminal. O 'exec bash' no final mantém o "
-            "terminal aberto depois da ajuda, para você já usar a ferramenta.[/]\n"
-        )
-
-    # 2) Recria os nossos .desktop (apaga os antigos para não sobrar lixo).
-    if not executor.dry_run:
-        PASTA_ATALHOS.mkdir(parents=True, exist_ok=True)
-        for antigo in PASTA_ATALHOS.glob(f"{PREFIXO}-*.desktop"):
-            antigo.unlink()
-        for ic in icones:
-            if ic.conteudo:
-                (PASTA_ATALHOS / ic.desktop_id).write_text(ic.conteudo, encoding="utf-8")
-    criados = sum(1 for ic in icones if ic.conteudo)
-    executor.registrar(f"Menu: {criados} atalhos criados em {PASTA_ATALHOS}")
-
-    # 3) Cria as pastas no GNOME com gsettings.
-    pastas_atuais = ler_lista_gsettings("folder-children") if gnome_disponivel() else []
-    comandos = comandos_gsettings(icones, pastas_atuais)
-    for n, (cmd, explica) in enumerate(comandos, 1):
-        mostrar_passo(SimpleNamespace(cmd=cmd, explica=explica), "linux", f"{n}/{len(comandos)}")
-        if rodar(cmd) != 0:
-            console.print("[bold red]✘ Falha ao configurar as pastas do menu.[/]")
-            return
-
-    # 4) Resumo em árvore.
-    arvore = Tree(f"[bold {CIANO}]📂 Menu de aplicativos[/]", guide_style=CINZA_ESCURO)
-    galhos: dict[str, Tree] = {}
-    for ic in sorted(icones, key=lambda i: i.pasta_id):
-        if ic.pasta_id not in galhos:
-            galhos[ic.pasta_id] = arvore.add(f"{icone_categoria(ic.pasta_nome)}  [bold]{ic.pasta_nome}[/]")
-        galhos[ic.pasta_id].add(f"[{VERDE}]●[/] {ic.nome}")
-    console.print(arvore)
-    for mensagem in avisos:
-        console.print(f"[{AMARELO}]⚠ {mensagem}[/]")
-
-
-# =============================================================================
-#  5. SISTEMA, CATÁLOGO E EXECUÇÃO
+#  4. SISTEMA, CATÁLOGO E EXECUÇÃO
 # =============================================================================
 
 PASTA = Path(__file__).resolve().parent
@@ -1835,16 +1568,10 @@ class Ferramenta:
     pos: list[Passo]
     verificar: dict
     notas: list[str]
-    menu: list[dict] = field(default_factory=list)
 
     @property
     def interna(self) -> bool:
         return self.categoria == CATEGORIA_INTERNA
-
-    @property
-    def vai_para_o_menu(self) -> bool:
-        """Categorias numeradas ("01 ...") viram pastas no menu de aplicativos."""
-        return bool(self.menu) and self.categoria[:2].isdigit()
 
 
 def substituir(texto: str, variaveis: dict) -> str:
@@ -1948,7 +1675,6 @@ def montar_ferramenta(item: dict, sistema: Sistema) -> Ferramenta | None:
         pos=[Passo(substituir(p["cmd"], v), substituir(p.get("explica", ""), v)) for p in plat.get("pos", [])],
         verificar={k: substituir(str(val), v) for k, val in verificar.items()},
         notas=[substituir(n, v) for n in notas],
-        menu=[item["menu"]] if isinstance(item.get("menu"), dict) else list(item.get("menu", [])),
     )
 
 
@@ -2306,25 +2032,6 @@ def resumo(ordem, catalogo, resultados, executor, inicio: float) -> None:
     desenhar_resumo(console, grupos, contagem, time.monotonic() - inicio, notas, executor.log, executor.dry_run)
 
 
-def fase_menu(catalogo, executor, resultados, instalado: dict[str, bool]) -> None:
-    """Coloca as ferramentas de segurança instaladas em pastas no menu do GNOME."""
-    console.print()
-    titulo(console, "📂", "Menu de aplicativos", "organizando as ferramentas em pastas, como no Kali")
-    if not executor.dry_run and not gnome_disponivel():
-        aviso(console, "As pastas no menu só funcionam no GNOME. Pulando esta etapa.", "alerta")
-        return
-
-    instaladas = []
-    for f in catalogo.values():
-        if not f.vai_para_o_menu:
-            continue
-        r = resultados.get(f.id)
-        if r in ("instalado", "existente", "simulado") or (r is None and instalado.get(f.id)):
-            instaladas.append(f)
-
-    organizar(instaladas, executor, console, mostrar_passo, rodar=lambda cmd: rodar_com_saida(executor, cmd))
-
-
 def carregar_ou_sair(sistema: Sistema) -> dict[str, Ferramenta]:
     try:
         return carregar_catalogo(sistema)
@@ -2342,8 +2049,6 @@ def main() -> None:
     parser.add_argument("--sem-pausa", action="store_true", help="não pausa antes de cada comando")
     parser.add_argument("--todos", action="store_true", help="seleciona tudo sem mostrar o menu")
     parser.add_argument("-y", "--sim", action="store_true", help="não pede confirmação do plano")
-    parser.add_argument("--menu", action="store_true",
-                        help="só reorganiza as pastas do menu de aplicativos, sem instalar nada")
     parser.add_argument("--os", choices=["fedora", "debian", "arch", "windows"],
                         help="simula outro sistema (só faz sentido com --dry-run)")
     args = parser.parse_args()
@@ -2353,7 +2058,7 @@ def main() -> None:
 
     detectado = detectar_sistema(args.os)
     banner(console, detectado, args.dry_run)
-    sistema = detectado if (args.menu or (args.todos and args.sim)) else escolher_sistema(detectado, forcado=bool(args.os))
+    sistema = detectado if (args.todos and args.sim) else escolher_sistema(detectado, forcado=bool(args.os))
 
     if sistema.so == "linux" and sistema.familia not in GERENCIADORES:
         aviso(console, "Distribuição não suportada. Suportadas: Fedora, Debian/Ubuntu e Arch.", "erro")
@@ -2365,23 +2070,15 @@ def main() -> None:
     if sistema.so == "windows" and not args.dry_run and not shutil.which("winget"):
         aviso(console, "winget não encontrado. Instale o 'App Installer' pela Microsoft Store.", "erro")
         sys.exit(1)
-    if args.menu and sistema.so != "linux":
-        aviso(console, "--menu só existe no Linux.", "erro")
-        sys.exit(1)
 
     os.environ["PATH"] = f"{Path.home() / '.local' / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"
 
     catalogo = carregar_ou_sair(sistema)
     PASTA_LOGS.mkdir(exist_ok=True)
-    prefixo = "menu" if args.menu else "instalacao"
-    executor = Executor(sistema, args.dry_run, PASTA_LOGS / f"{prefixo}-{dt.datetime.now():%Y%m%d-%H%M%S}.log")
+    executor = Executor(sistema, args.dry_run, PASTA_LOGS / f"instalacao-{dt.datetime.now():%Y%m%d-%H%M%S}.log")
     executor.registrar(f"Sistema: {sistema.descricao} ({sistema.familia}) · dry-run={args.dry_run}")
 
     instalado = verificar_instalados(catalogo, executor, verificar=not args.os)
-
-    if args.menu:
-        fase_menu(catalogo, executor, {}, instalado)
-        return
 
     escolhidas = [f.id for fs in agrupar_por_categoria(catalogo).values() for f in fs] if args.todos \
         else escolher_ferramentas(catalogo, instalado)
@@ -2413,8 +2110,6 @@ def main() -> None:
     resultados: dict[str, str] = {}
     try:
         instalar(ordem, catalogo, executor, instalado, pausar, resultados)
-        if sistema.so == "linux":
-            fase_menu(catalogo, executor, resultados, instalado)
     except KeyboardInterrupt:
         console.print()
         aviso(console, "Interrompido pelo usuário.", "alerta")
